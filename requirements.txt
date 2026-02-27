@@ -1,3 +1,3 @@
 selenium==4.27.1
-python-telegram-bot==13.15
+python-telegram-bot==22.6   # ou só "python-telegram-bot" sem versão pra pegar a latest
 pillow==10.4.0
