@@ -9,7 +9,6 @@ from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from selenium.common.exceptions import TimeoutException, WebDriverException
 from telegram import Bot
 
 # ================= CONFIGS =================
@@ -35,11 +34,7 @@ async def send_telegram_screenshot(driver, step_name: str):
         bio = BytesIO()
         Image.open(BytesIO(png)).save(bio, format='PNG')
         bio.seek(0)
-        await bot.send_photo(
-            chat_id=TELEGRAM_CHAT_ID,
-            photo=bio,
-            caption=f"🖥️ {step_name} - {time.strftime('%Y-%m-%d %H:%M:%S')}"
-        )
+        await bot.send_photo(chat_id=TELEGRAM_CHAT_ID, photo=bio, caption=f"🖥️ {step_name} - {time.strftime('%Y-%m-%d %H:%M:%S')}")
         print(f"[SCREENSHOT] {step_name}")
     except Exception as e:
         print(f"[ERRO SCREENSHOT] {e}")
@@ -81,17 +76,16 @@ async def js_fill(driver, selector, value):
                 el.value = '{value}';
                 el.dispatchEvent(new Event('input', {{bubbles: true}}));
                 el.dispatchEvent(new Event('change', {{bubbles: true}}));
-                el.dispatchEvent(new Event('blur', {{bubbles: true}}));
             }}
         """)
-        await send_telegram_text(f"✅ Senha preenchida com JS (clicou + digitou)")
+        await send_telegram_text(f"✅ Preenchido com JS: {selector}")
         return True
     except Exception as e:
-        await send_telegram_text(f"Erro JS fill: {str(e)[:150]}")
+        await send_telegram_text(f"Erro JS: {str(e)[:150]}")
         return False
 
 async def main():
-    await send_telegram_text("🤖 Bot v100% - Usando teu JS Path exato para senha")
+    await send_telegram_text("🤖 Bot vFINAL - Usando os IDs e classes exatos que tu mandou (sem confusão de forms)")
 
     while True:
         driver = None
@@ -110,24 +104,19 @@ async def main():
                 await send_telegram_screenshot(driver, "Popup fechado")
                 await asyncio.sleep(8)
             except:
-                await send_telegram_text("Sem popup OneSignal")
+                await send_telegram_text("Sem popup")
 
-            # Username
-            try:
-                username_el = wait.until(EC.element_to_be_clickable((By.ID, "username-login-page")))
-                username_el.clear()
-                username_el.send_keys(USERNAME)
-                await send_telegram_screenshot(driver, "2. Username OK")
-            except:
-                await js_fill(driver, '#username-login-page', USERNAME)
-                await send_telegram_screenshot(driver, "2. Username JS OK")
+            # Username - ID exato que tu mandou
+            await send_telegram_text("Preenchendo username (ID: username-login-form-oneline)")
+            await js_fill(driver, '#username-login-form-oneline', USERNAME)
+            await send_telegram_screenshot(driver, "2. Username preenchido")
 
             await asyncio.sleep(8)
 
-            # SENHA - SELETOR EXATO QUE TU MANDASTE (adaptado pro hash dinâmico)
-            await send_telegram_text("Preenchendo senha com teu JS Path exato...")
-            await js_fill(driver, 'form[id^="btoLoginForm"] > div:nth-child(3) > input', PASSWORD)
-            await send_telegram_screenshot(driver, "3. Senha preenchida (JS Path que tu mandou)")
+            # Senha - classe exata que tu mandou
+            await send_telegram_text("Preenchendo senha (classe: bto-form-control-password)")
+            await js_fill(driver, '.bto-form-control-password', PASSWORD)
+            await send_telegram_screenshot(driver, "3. Senha preenchida")
 
             await asyncio.sleep(10)
 
