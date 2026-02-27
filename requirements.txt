@@ -1,0 +1,4 @@
+selenium==4.18.1
+undetected-chromedriver==3.5.5
+python-telegram-bot==13.15  # versão sync simples e leve
+pillow==10.2.0  # pra screenshot
