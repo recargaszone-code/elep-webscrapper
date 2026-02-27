@@ -1,5 +1,6 @@
 import os
 import time
+import asyncio
 from io import BytesIO
 from PIL import Image
 from selenium import webdriver
@@ -10,22 +11,39 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException, NoSuchElementException, WebDriverException
 from telegram import Bot
+from telegram.error import TelegramError
 
-# ================= CONFIGS - MUDE ISSO DEPOIS =================
+# ================= CONFIGS - MUDE DEPOIS DE TESTAR =================
 TELEGRAM_TOKEN = "8742776802:AAHSzD1qTwCqMEOdoW9_pT2l5GfmMBWUZQY"
 TELEGRAM_CHAT_ID = "7427648935"
 USERNAME = "857789345"
 PASSWORD = "max123ZICO"
 SITE_URL = "https://www.elephantbet.co.mz/aviator/"
-# ==============================================================
+# ===================================================================
 
 bot = Bot(token=TELEGRAM_TOKEN)
 
-def send_telegram_text(msg):
+async def send_telegram_text_async(msg):
     try:
-        bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=msg)
-    except Exception as e:
+        await bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=msg)
+    except TelegramError as e:
         print(f"[ERRO TELEGRAM TEXT] {e}")
+    except Exception as e:
+        print(f"[ERRO TELEGRAM GERAL] {e}")
+
+def send_telegram_text(msg):
+    """Wrapper sync para chamar async"""
+    asyncio.run(send_telegram_text_async(msg))
+
+async def send_telegram_photo_async(bio, caption):
+    try:
+        await bot.send_photo(
+            chat_id=TELEGRAM_CHAT_ID,
+            photo=bio,
+            caption=caption
+        )
+    except Exception as e:
+        print(f"[ERRO TELEGRAM PHOTO] {e}")
 
 def send_telegram_screenshot(driver, step_name):
     try:
@@ -34,15 +52,12 @@ def send_telegram_screenshot(driver, step_name):
         bio = BytesIO()
         img.save(bio, format='PNG')
         bio.seek(0)
-        bot.send_photo(
-            chat_id=TELEGRAM_CHAT_ID,
-            photo=bio,
-            caption=f"🖥️ {step_name} - {time.strftime('%Y-%m-%d %H:%M:%S')}"
-        )
+        caption = f"🖥️ {step_name} - {time.strftime('%Y-%m-%d %H:%M:%S')}"
+        asyncio.run(send_telegram_photo_async(bio, caption))
         print(f"[SCREENSHOT ENVIADO] {step_name}")
     except Exception as e:
         print(f"[ERRO SCREENSHOT] {e}")
-        send_telegram_text(f"Erro ao enviar print: {step_name}")
+        send_telegram_text(f"Erro ao enviar screenshot: {step_name}")
 
 def init_driver():
     options = Options()
@@ -69,21 +84,35 @@ def init_driver():
 
 def extract_history(driver):
     try:
-        # Seletores comuns no Aviator (Spribe) - ajuste conforme inspecionar o site
-        # Exemplos: '.history-item', '.multiplier-bubble', '.payout-history .coefficient'
-        history_elements = driver.find_elements(By.CSS_SELECTOR, 
-            ".payout-history .coefficient, .history-multiplier, .bubble-multiplier, [class*='multiplier'], .crash-history-item"
-        )
-        if not history_elements:
-            history_elements = driver.find_elements(By.CSS_SELECTOR, ".history .value, .recent-crashes span")
+        # Seletores comuns para Aviator (Spribe) - ajuste se necessário inspecionando o site
+        selectors = [
+            ".payout-history .coefficient",
+            ".history-multiplier",
+            ".bubble-multiplier",
+            "[class*='multiplier']",
+            ".crash-history-item",
+            ".history .value",
+            ".recent-crashes span",
+            ".multiplier-history .multiplier"
+        ]
         
-        history_texts = [el.text.strip() for el in history_elements if el.text.strip() and 'x' in el.text][:20]
-        return history_texts
-    except:
+        history_texts = []
+        for selector in selectors:
+            elements = driver.find_elements(By.CSS_SELECTOR, selector)
+            for el in elements:
+                text = el.text.strip()
+                if text and ('x' in text.lower() or text.isdigit() or '.' in text):
+                    history_texts.append(text)
+            if len(history_texts) >= 20:
+                break
+        
+        return history_texts[:20]
+    except Exception as e:
+        print(f"[ERRO EXTRAÇÃO HISTÓRICO] {e}")
         return []
 
 def main():
-    send_telegram_text("🤖 Bot iniciado no Render - Aviator ElephantBet Scraper v1")
+    send_telegram_text("🤖 Bot iniciado no Render - Aviator ElephantBet Scraper (PTB v22.6)")
 
     while True:
         driver = None
@@ -96,7 +125,7 @@ def main():
 
             wait = WebDriverWait(driver, 25)
 
-            # Campo de telefone / username
+            # Tenta preencher username/telefone
             try:
                 username_field = wait.until(EC.presence_of_element_located((By.ID, "username-login-page")))
                 username_field.clear()
@@ -104,12 +133,12 @@ def main():
                 send_telegram_screenshot(driver, "2. Telefone/Username preenchido")
                 time.sleep(5)
             except TimeoutException:
-                send_telegram_text("⚠️ Campo de username não encontrado. Pode já estar logado ou página mudou.")
+                send_telegram_text("⚠️ Campo username não encontrado (pode já estar logado ou layout mudou)")
                 send_telegram_screenshot(driver, "Campo username não achado")
 
-            # Campo de senha
+            # Senha
             try:
-                password_field = driver.find_element(By.CSS_SELECTOR, 'input[type="password"][placeholder="Senha"]')
+                password_field = driver.find_element(By.CSS_SELECTOR, 'input[type="password"][name="password"], input[placeholder*="Senha"]')
                 password_field.clear()
                 password_field.send_keys(PASSWORD)
                 send_telegram_screenshot(driver, "3. Senha preenchida")
@@ -117,38 +146,38 @@ def main():
             except NoSuchElementException:
                 send_telegram_text("⚠️ Campo senha não encontrado.")
 
-            # Botão de login
+            # Botão login
             try:
                 login_button = driver.find_element(By.ID, "login-page")
                 login_button.click()
                 send_telegram_screenshot(driver, "4. Clicou em 'Conecte-se'")
-                time.sleep(10)  # espera carregamento pós-login
+                time.sleep(10)  # espera pós-login
             except NoSuchElementException:
-                send_telegram_text("⚠️ Botão login não encontrado. Pode já estar logado.")
+                send_telegram_text("⚠️ Botão login não encontrado (pode já estar logado)")
 
-            # Tenta capturar histórico
+            # Captura histórico inicial
             history = extract_history(driver)
             if history:
-                msg = f"📊 Histórico recente encontrado ({len(history)} itens):\n" + " | ".join(history)
+                msg = f"📊 Histórico recente ({len(history)} itens):\n" + " | ".join(history)
                 send_telegram_text(msg)
                 send_telegram_screenshot(driver, "5. Jogo carregado + Histórico visível")
             else:
-                send_telegram_text("⚠️ Nenhum histórico detectado. Verifique seletores ou se precisa clicar em aba 'Histórico'.")
+                send_telegram_text("⚠️ Nenhum histórico detectado ainda. Pode precisar de aba 'Histórico' ou selector errado.")
                 send_telegram_screenshot(driver, "5. Jogo carregado (sem histórico claro)")
 
-            # Monitoramento contínuo (atualiza a cada 30s por ~15 min antes de relogar)
-            for i in range(30):
+            # Loop de monitoramento (atualiza a cada 30s, por ~15 min)
+            for _ in range(30):
                 time.sleep(30)
                 try:
                     new_history = extract_history(driver)
                     if new_history:
                         latest = new_history[0] if new_history else "?"
-                        send_telegram_text(f"🆕 Último multiplier detectado: {latest}")
+                        send_telegram_text(f"🆕 Último multiplier: {latest}")
                 except:
                     pass
 
         except Exception as e:
-            error_msg = f"❌ Erro grave: {str(e)[:300]}... Reconectando em 60s"
+            error_msg = f"❌ Erro grave: {str(e)[:400]}... Reconectando em 60s"
             send_telegram_text(error_msg)
             print(error_msg)
         finally:
@@ -158,7 +187,7 @@ def main():
                 except:
                     pass
         
-        time.sleep(60)  # Pausa entre ciclos completos
+        time.sleep(60)  # Delay entre tentativas completas de login
 
 if __name__ == "__main__":
     main()
