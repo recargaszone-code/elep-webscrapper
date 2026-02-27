@@ -76,6 +76,7 @@ async def js_fill(driver, selector, value):
         driver.execute_script(f"""
             var el = document.querySelector('{selector}');
             if (el) {{
+                el.click();  // clica primeiro como tu pediu
                 el.focus();
                 el.value = '{value}';
                 el.dispatchEvent(new Event('input', {{bubbles: true}}));
@@ -83,14 +84,14 @@ async def js_fill(driver, selector, value):
                 el.dispatchEvent(new Event('blur', {{bubbles: true}}));
             }}
         """)
-        await send_telegram_text(f"✅ JS fill sucesso para {selector}")
+        await send_telegram_text(f"✅ JS fill + clique sucesso para {selector}")
         return True
     except Exception as e:
-        await send_telegram_text(f"Erro JS: {str(e)[:150]}")
+        await send_telegram_text(f"Erro JS fill: {str(e)[:150]}")
         return False
 
 async def main():
-    await send_telegram_text("🤖 Bot FINAL - asyncio importado + senha 100% JS")
+    await send_telegram_text("🤖 Bot FINAL - Senha selecionada APENAS pela class .btosystem-enter (sem type=password)")
 
     while True:
         driver = None
@@ -124,10 +125,10 @@ async def main():
 
             await asyncio.sleep(8)
 
-            # Senha - sempre JS (campo exato que tu mandou)
-            await send_telegram_text("Preenchendo senha via JS (name='password')")
-            await js_fill(driver, 'input[name="password"]', PASSWORD)
-            await send_telegram_screenshot(driver, "3. Senha preenchida via JS")
+            # SENHA - SELETOR APENAS PELA CLASS (como tu pediu)
+            await send_telegram_text("Preenchendo senha via JS usando class .btosystem-enter")
+            await js_fill(driver, 'input.btosystem-enter', PASSWORD)
+            await send_telegram_screenshot(driver, "3. Senha preenchida via JS (class btosystem-enter)")
 
             await asyncio.sleep(10)
 
