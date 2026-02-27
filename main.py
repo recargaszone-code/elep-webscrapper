@@ -9,7 +9,7 @@ from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from telegram import Bot 
+from telegram import Bot
 
 # ================= CONFIGS =================
 TELEGRAM_TOKEN = "8742776802:AAHSzD1qTwCqMEOdoW9_pT2l5GfmMBWUZQY"
@@ -60,8 +60,13 @@ def init_driver():
 
 def extract_history(driver):
     try:
-        elements = driver.find_elements(By.CSS_SELECTOR, ".payouts-block .payout")
-        history = [el.get_attribute("innerText").strip() for el in elements if el.get_attribute("innerText").strip() and 'x' in el.get_attribute("innerText")]
+        # Seletor principal + fallback (mais estável possível)
+        elements = driver.find_elements(By.CSS_SELECTOR, "div.payout, .payout.ng-star-inserted, [appcoloredmultiplier]")
+        if not elements:
+            elements = driver.find_elements(By.XPATH, "//div[contains(@class, 'payout')]")
+        
+        history = [el.get_attribute("innerText").strip() for el in elements 
+                  if el.get_attribute("innerText").strip() and 'x' in el.get_attribute("innerText")]
         return history[:30]  # exatamente 30 valores
     except:
         return []
@@ -77,13 +82,12 @@ async def js_fill(driver, selector, value):
                 el.dispatchEvent(new Event('change', {{bubbles: true}}));
             }}
         """)
-        await send_telegram_text(f"✅ Preenchido: {selector}")
         return True
     except:
         return False
 
 async def main():
-    await send_telegram_text("🤖 Bot vFINAL - Agora entra no iframe + envia array com 30 multipliers")
+    await send_telegram_text("🤖 Bot v100% - Histórico dentro do iframe (seletor corrigido + wait forte)")
 
     while True:
         driver = None
@@ -92,63 +96,49 @@ async def main():
             driver.get(SITE_URL)
             await send_telegram_screenshot(driver, "1. Página carregada")
 
-            wait = WebDriverWait(driver, 40)
+            wait = WebDriverWait(driver, 45)
 
-            # Fecha OneSignal
+            # Fecha OneSignal + login (já funcionando)
             try:
                 cancel_btn = wait.until(EC.presence_of_element_located((By.ID, "onesignal-slidedown-cancel-button")))
                 driver.execute_script("arguments[0].click();", cancel_btn)
-                await send_telegram_text("✅ OneSignal fechado")
-                await send_telegram_screenshot(driver, "Popup fechado")
-                await asyncio.sleep(8)
-            except:
-                await send_telegram_text("Sem popup")
+            except: pass
 
-            # Username e Senha (já funcionando)
             await js_fill(driver, '#username-login-form-oneline', USERNAME)
-            await send_telegram_screenshot(driver, "2. Username OK")
             await asyncio.sleep(8)
-
             await js_fill(driver, '.bto-form-control-password', PASSWORD)
-            await send_telegram_screenshot(driver, "3. Senha OK")
             await asyncio.sleep(10)
 
-            # Botão login
             login_btn = wait.until(EC.presence_of_element_located((By.ID, "login-form-oneline")))
             driver.execute_script("arguments[0].click();", login_btn)
-            await send_telegram_text("✅ Login clicado")
             await send_telegram_screenshot(driver, "4. Login clicado")
             await asyncio.sleep(15)
 
-            # ==================== NOVO: ESPERA O IFRAME ====================
-            try:
-                # Espera o iframe carregar e entra nele
-                wait.until(EC.frame_to_be_available_and_switch_to_it((By.ID, "game_loader")))
-                await send_telegram_text("✅ Entrou no iframe do jogo (game_loader)")
-                await send_telegram_screenshot(driver, "6. Iframe do Aviator carregado")
-                await asyncio.sleep(12)  # tempo pro jogo renderizar o histórico
-            except Exception as e:
-                await send_telegram_text(f"Erro ao entrar no iframe: {str(e)[:150]}")
-                await send_telegram_screenshot(driver, "Erro iframe")
+            # ==================== IFRAME + HISTÓRICO ====================
+            wait.until(EC.frame_to_be_available_and_switch_to_it((By.ID, "game_loader")))
+            await send_telegram_text("✅ Entrou no iframe do Aviator")
+            await send_telegram_screenshot(driver, "5. Iframe carregado")
 
-            # ==================== PEGA O HISTÓRICO ====================
+            await asyncio.sleep(18)  # tempo pro histórico renderizar
+
+            # Screenshot antes de pegar histórico
+            await send_telegram_screenshot(driver, "6. Tela do jogo ANTES de extrair histórico")
+
             history = extract_history(driver)
             
             if history:
-                # Envia como array limpo com até 30 valores
-                msg = f"📊 HISTÓRICO AVIATOR (30 últimos):\n{str(history)}"
-                await send_telegram_text(msg)
-                await send_telegram_screenshot(driver, "7. Histórico enviado (30 valores)")
+                await send_telegram_text(f"📊 HISTÓRICO AVIATOR (30 valores):\n{str(history)}")
+                await send_telegram_screenshot(driver, "7. Histórico enviado com sucesso!")
             else:
-                await send_telegram_text("⚠️ Histórico ainda não apareceu")
-                await send_telegram_screenshot(driver, "7. Sem histórico")
+                await send_telegram_text("⚠️ Nenhum payout encontrado ainda")
+                await send_telegram_screenshot(driver, "7. Sem histórico visível")
 
-            # Monitora novos multipliers (continua dentro do iframe)
+            # Monitora novos
             for _ in range(40):
                 await asyncio.sleep(30)
                 new_hist = extract_history(driver)
                 if new_hist and (not history or new_hist[0] != history[0]):
-                    await send_telegram_text(f"🆕 Novo multiplier: {new_hist[0]}")
+                    await send_telegram_text(f"🆕 Novo: {new_hist[0]}")
                     history = new_hist
 
         except Exception as e:
@@ -160,11 +150,9 @@ async def main():
                 try:
                     driver.switch_to.default_content()
                     driver.quit()
-                except:
-                    pass
+                except: pass
 
         await asyncio.sleep(60)
 
 if __name__ == "__main__":
     asyncio.run(main())
-
