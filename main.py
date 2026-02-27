@@ -9,7 +9,7 @@ from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from selenium.common.exceptions import TimeoutException, NoSuchElementException, WebDriverException
+from selenium.common.exceptions import TimeoutException, WebDriverException
 from telegram import Bot
 
 # ================= CONFIGS =================
@@ -76,7 +76,7 @@ async def js_fill(driver, selector, value):
         driver.execute_script(f"""
             var el = document.querySelector('{selector}');
             if (el) {{
-                el.click();  // clica primeiro como tu pediu
+                el.click();
                 el.focus();
                 el.value = '{value}';
                 el.dispatchEvent(new Event('input', {{bubbles: true}}));
@@ -84,14 +84,14 @@ async def js_fill(driver, selector, value):
                 el.dispatchEvent(new Event('blur', {{bubbles: true}}));
             }}
         """)
-        await send_telegram_text(f"✅ JS fill + clique sucesso para {selector}")
+        await send_telegram_text(f"✅ Senha preenchida com JS (clicou + digitou)")
         return True
     except Exception as e:
         await send_telegram_text(f"Erro JS fill: {str(e)[:150]}")
         return False
 
 async def main():
-    await send_telegram_text("🤖 Bot FINAL - Senha selecionada APENAS pela class .btosystem-enter (sem type=password)")
+    await send_telegram_text("🤖 Bot v100% - Usando teu JS Path exato para senha")
 
     while True:
         driver = None
@@ -119,16 +119,15 @@ async def main():
                 username_el.send_keys(USERNAME)
                 await send_telegram_screenshot(driver, "2. Username OK")
             except:
-                await send_telegram_text("Username normal falhou - usando JS")
                 await js_fill(driver, '#username-login-page', USERNAME)
                 await send_telegram_screenshot(driver, "2. Username JS OK")
 
             await asyncio.sleep(8)
 
-            # SENHA - SELETOR APENAS PELA CLASS (como tu pediu)
-            await send_telegram_text("Preenchendo senha via JS usando class .btosystem-enter")
-            await js_fill(driver, 'input.btosystem-enter', PASSWORD)
-            await send_telegram_screenshot(driver, "3. Senha preenchida via JS (class btosystem-enter)")
+            # SENHA - SELETOR EXATO QUE TU MANDASTE (adaptado pro hash dinâmico)
+            await send_telegram_text("Preenchendo senha com teu JS Path exato...")
+            await js_fill(driver, 'form[id^="btoLoginForm"] > div:nth-child(3) > input', PASSWORD)
+            await send_telegram_screenshot(driver, "3. Senha preenchida (JS Path que tu mandou)")
 
             await asyncio.sleep(10)
 
@@ -136,7 +135,7 @@ async def main():
             try:
                 login_btn = wait.until(EC.presence_of_element_located((By.ID, "login-page")))
                 driver.execute_script("arguments[0].click();", login_btn)
-                await send_telegram_text("✅ Botão login clicado")
+                await send_telegram_text("✅ Login clicado")
                 await send_telegram_screenshot(driver, "4. Login clicado")
                 await asyncio.sleep(25)
             except Exception as e:
