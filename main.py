@@ -60,10 +60,15 @@ def init_driver():
 
 def extract_history(driver):
     try:
-        # Seletor mais forte possível (ignora _ngcontent dinâmico)
-        elements = driver.find_elements(By.XPATH, "//div[contains(@class, 'payout')]")
-        history = [el.get_attribute("innerText").strip() for el in elements 
-                   if el.get_attribute("innerText").strip() and 'x' in el.get_attribute("innerText")]
+        # Espera o payouts-block usando teu XPATH full
+        payouts_block = driver.find_element(By.XPATH, "/html/body/app-root/app-game/div/div[1]/div[2]/div/div[2]/div[2]/app-stats-widget/div/div[1]")
+        # Pega todos os .payout dentro dele
+        elements = payouts_block.find_elements(By.CSS_SELECTOR, "div.payout")
+        history = [el.get_attribute("innerText").strip() for el in elements if el.get_attribute("innerText").strip() and 'x' in el.get_attribute("innerText")]
+        if not history:
+            # Fallback para teu JS Path convertido para XPATH
+            elements = driver.find_elements(By.XPATH, "//body/app-root/app-game/div/div[@class='main-container']/div[@class='w-100 h-100']/div/div[@class='game-play']/div[@class='result-history disabled-on-game-focused']/app-stats-widget/div/app-stats-dropdown/div/div[@class='payouts-block']/div[@class='payout ng-star-inserted']")
+            history = [el.get_attribute("innerText").strip() for el in elements if el.get_attribute("innerText").strip() and 'x' in el.get_attribute("innerText")]
         return history[:30]
     except Exception as e:
         print(f"[ERRO extract] {e}")
@@ -83,7 +88,7 @@ async def js_fill(driver, selector, value):
         return False
 
 async def main():
-    await send_telegram_text("🤖 Bot vFINAL - Histórico com wait forte + XPath")
+    await send_telegram_text("🤖 Bot vFINAL - Histórico com teu XPATH full + fallback JS Path")
 
     while True:
         driver = None
@@ -94,7 +99,7 @@ async def main():
 
             wait = WebDriverWait(driver, 50)
 
-            # Login (já funcionando)
+            # Login
             try:
                 cancel_btn = wait.until(EC.presence_of_element_located((By.ID, "onesignal-slidedown-cancel-button")))
                 driver.execute_script("arguments[0].click();", cancel_btn)
@@ -110,23 +115,21 @@ async def main():
             await send_telegram_screenshot(driver, "4. Login clicado")
             await asyncio.sleep(15)
 
-            # IFRAME
+            # Iframe
             wait.until(EC.frame_to_be_available_and_switch_to_it((By.ID, "game_loader")))
             await send_telegram_text("✅ Entrou no iframe")
             await send_telegram_screenshot(driver, "5. Iframe carregado")
 
-            # ====================== ESPERA HISTÓRICO ======================
-            await asyncio.sleep(25)  # tempo necessário pro histórico renderizar
-            await send_telegram_screenshot(driver, "6. Tela do jogo (antes do wait)")
+            await asyncio.sleep(25)
 
-            # Wait forte até aparecer payout
+            # Wait forte até payouts-wrapper aparecer (teu XPATH)
             try:
-                wait.until(EC.presence_of_element_located((By.XPATH, "//div[contains(@class, 'payout')]")))
-                await send_telegram_text("✅ Elemento payout detectado!")
+                wait.until(EC.presence_of_element_located((By.XPATH, "/html/body/app-root/app-game/div/div[1]/div[2]/div/div[2]/div[2]/app-stats-widget/div/div[1]")))
+                await send_telegram_text("✅ Payouts-wrapper detectado!")
             except:
-                await send_telegram_text("⚠️ Nenhum payout após 25s")
+                await send_telegram_text("⚠️ Payouts-wrapper não encontrado")
 
-            await send_telegram_screenshot(driver, "7. Tela do jogo (depois do wait)")
+            await send_telegram_screenshot(driver, "6. Tela do jogo com histórico visível")
 
             # Extrai
             history = extract_history(driver)
@@ -135,12 +138,12 @@ async def main():
             if history:
                 msg = f"📊 HISTÓRICO AVIATOR (30 valores):\n{str(history)}"
                 await send_telegram_text(msg)
-                await send_telegram_screenshot(driver, "8. Histórico enviado com sucesso!")
+                await send_telegram_screenshot(driver, "7. Histórico enviado!")
             else:
-                await send_telegram_text("❌ Ainda sem histórico - tentando de novo no próximo ciclo")
-                await send_telegram_screenshot(driver, "8. Sem histórico")
+                await send_telegram_text("❌ Sem multipliers - tenta mais delay no próximo ciclo")
+                await send_telegram_screenshot(driver, "7. Sem histórico")
 
-            # Monitora novos multipliers
+            # Monitora
             for _ in range(50):
                 await asyncio.sleep(30)
                 new_hist = extract_history(driver)
