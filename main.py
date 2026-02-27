@@ -78,14 +78,14 @@ async def js_fill(driver, selector, value):
                 el.dispatchEvent(new Event('change', {{bubbles: true}}));
             }}
         """)
-        await send_telegram_text(f"✅ Preenchido com JS: {selector}")
+        await send_telegram_text(f"✅ Preenchido: {selector}")
         return True
     except Exception as e:
         await send_telegram_text(f"Erro JS: {str(e)[:150]}")
         return False
 
 async def main():
-    await send_telegram_text("🤖 Bot vFINAL - Usando os IDs e classes exatos que tu mandou (sem confusão de forms)")
+    await send_telegram_text("🤖 Bot vFINAL - Botão de login atualizado (id='login-form-oneline')")
 
     while True:
         driver = None
@@ -106,46 +106,44 @@ async def main():
             except:
                 await send_telegram_text("Sem popup")
 
-            # Username - ID exato que tu mandou
-            await send_telegram_text("Preenchendo username (ID: username-login-form-oneline)")
+            # Username
             await js_fill(driver, '#username-login-form-oneline', USERNAME)
             await send_telegram_screenshot(driver, "2. Username preenchido")
 
             await asyncio.sleep(8)
 
-            # Senha - classe exata que tu mandou
-            await send_telegram_text("Preenchendo senha (classe: bto-form-control-password)")
+            # Senha
             await js_fill(driver, '.bto-form-control-password', PASSWORD)
             await send_telegram_screenshot(driver, "3. Senha preenchida")
 
             await asyncio.sleep(10)
 
-            # Botão login
+            # ================= BOTÃO LOGIN ATUALIZADO =================
             try:
-                login_btn = wait.until(EC.presence_of_element_located((By.ID, "login-page")))
+                login_btn = wait.until(EC.presence_of_element_located((By.ID, "login-form-oneline")))
                 driver.execute_script("arguments[0].click();", login_btn)
-                await send_telegram_text("✅ Login clicado")
-                await send_telegram_screenshot(driver, "4. Login clicado")
+                await send_telegram_text("✅ Botão 'Login' clicado (id=login-form-oneline)")
+                await send_telegram_screenshot(driver, "4. Login clicado com sucesso")
                 await asyncio.sleep(25)
             except Exception as e:
-                await send_telegram_text(f"Erro botão: {str(e)[:200]}")
-                await send_telegram_screenshot(driver, "Erro botão")
+                await send_telegram_text(f"Erro botão login: {str(e)[:200]}")
+                await send_telegram_screenshot(driver, "Erro no botão login")
 
             # Histórico
             history = extract_history(driver)
             if history:
                 msg = f"📊 Histórico ({len(history)}):\n" + " | ".join(history)
                 await send_telegram_text(msg)
-                await send_telegram_screenshot(driver, "5. Histórico OK")
+                await send_telegram_screenshot(driver, "5. Histórico OK - Logado!")
             else:
-                await send_telegram_text("Sem histórico ainda")
+                await send_telegram_text("Sem histórico ainda (pode demorar um pouco)")
                 await send_telegram_screenshot(driver, "5. Sem histórico")
 
             for _ in range(40):
                 await asyncio.sleep(30)
                 new_hist = extract_history(driver)
                 if new_hist:
-                    await send_telegram_text(f"🆕 Último: {new_hist[0]}")
+                    await send_telegram_text(f"🆕 Último multiplier: {new_hist[0]}")
 
         except Exception as e:
             await send_telegram_text(f"❌ Erro: {str(e)[:300]}")
