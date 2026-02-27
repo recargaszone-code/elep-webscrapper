@@ -62,7 +62,7 @@ def extract_history(driver):
     try:
         elements = driver.find_elements(By.CSS_SELECTOR, ".payouts-block .payout")
         history = [el.get_attribute("innerText").strip() for el in elements if el.get_attribute("innerText").strip() and 'x' in el.get_attribute("innerText")]
-        return history[:30]
+        return history[:30]  # exatamente 30 valores
     except:
         return []
 
@@ -71,8 +71,7 @@ async def js_fill(driver, selector, value):
         driver.execute_script(f"""
             var el = document.querySelector('{selector}');
             if (el) {{
-                el.click();
-                el.focus();
+                el.click(); el.focus();
                 el.value = '{value}';
                 el.dispatchEvent(new Event('input', {{bubbles: true}}));
                 el.dispatchEvent(new Event('change', {{bubbles: true}}));
@@ -80,12 +79,11 @@ async def js_fill(driver, selector, value):
         """)
         await send_telegram_text(f"✅ Preenchido: {selector}")
         return True
-    except Exception as e:
-        await send_telegram_text(f"Erro JS: {str(e)[:150]}")
+    except:
         return False
 
 async def main():
-    await send_telegram_text("🤖 Bot vFINAL - Botão de login atualizado (id='login-form-oneline')")
+    await send_telegram_text("🤖 Bot vFINAL - Agora entra no iframe + envia array com 30 multipliers")
 
     while True:
         driver = None
@@ -106,44 +104,52 @@ async def main():
             except:
                 await send_telegram_text("Sem popup")
 
-            # Username
+            # Username e Senha (já funcionando)
             await js_fill(driver, '#username-login-form-oneline', USERNAME)
-            await send_telegram_screenshot(driver, "2. Username preenchido")
-
+            await send_telegram_screenshot(driver, "2. Username OK")
             await asyncio.sleep(8)
 
-            # Senha
             await js_fill(driver, '.bto-form-control-password', PASSWORD)
-            await send_telegram_screenshot(driver, "3. Senha preenchida")
-
+            await send_telegram_screenshot(driver, "3. Senha OK")
             await asyncio.sleep(10)
 
-            # ================= BOTÃO LOGIN ATUALIZADO =================
+            # Botão login
+            login_btn = wait.until(EC.presence_of_element_located((By.ID, "login-form-oneline")))
+            driver.execute_script("arguments[0].click();", login_btn)
+            await send_telegram_text("✅ Login clicado")
+            await send_telegram_screenshot(driver, "4. Login clicado")
+            await asyncio.sleep(15)
+
+            # ==================== NOVO: ESPERA O IFRAME ====================
             try:
-                login_btn = wait.until(EC.presence_of_element_located((By.ID, "login-form-oneline")))
-                driver.execute_script("arguments[0].click();", login_btn)
-                await send_telegram_text("✅ Botão 'Login' clicado (id=login-form-oneline)")
-                await send_telegram_screenshot(driver, "4. Login clicado com sucesso")
-                await asyncio.sleep(25)
+                # Espera o iframe carregar e entra nele
+                wait.until(EC.frame_to_be_available_and_switch_to_it((By.ID, "game_loader")))
+                await send_telegram_text("✅ Entrou no iframe do jogo (game_loader)")
+                await send_telegram_screenshot(driver, "6. Iframe do Aviator carregado")
+                await asyncio.sleep(12)  # tempo pro jogo renderizar o histórico
             except Exception as e:
-                await send_telegram_text(f"Erro botão login: {str(e)[:200]}")
-                await send_telegram_screenshot(driver, "Erro no botão login")
+                await send_telegram_text(f"Erro ao entrar no iframe: {str(e)[:150]}")
+                await send_telegram_screenshot(driver, "Erro iframe")
 
-            # Histórico
+            # ==================== PEGA O HISTÓRICO ====================
             history = extract_history(driver)
+            
             if history:
-                msg = f"📊 Histórico ({len(history)}):\n" + " | ".join(history)
+                # Envia como array limpo com até 30 valores
+                msg = f"📊 HISTÓRICO AVIATOR (30 últimos):\n{str(history)}"
                 await send_telegram_text(msg)
-                await send_telegram_screenshot(driver, "5. Histórico OK - Logado!")
+                await send_telegram_screenshot(driver, "7. Histórico enviado (30 valores)")
             else:
-                await send_telegram_text("Sem histórico ainda (pode demorar um pouco)")
-                await send_telegram_screenshot(driver, "5. Sem histórico")
+                await send_telegram_text("⚠️ Histórico ainda não apareceu")
+                await send_telegram_screenshot(driver, "7. Sem histórico")
 
+            # Monitora novos multipliers (continua dentro do iframe)
             for _ in range(40):
                 await asyncio.sleep(30)
                 new_hist = extract_history(driver)
-                if new_hist:
-                    await send_telegram_text(f"🆕 Último multiplier: {new_hist[0]}")
+                if new_hist and (not history or new_hist[0] != history[0]):
+                    await send_telegram_text(f"🆕 Novo multiplier: {new_hist[0]}")
+                    history = new_hist
 
         except Exception as e:
             await send_telegram_text(f"❌ Erro: {str(e)[:300]}")
@@ -152,6 +158,7 @@ async def main():
         finally:
             if driver:
                 try:
+                    driver.switch_to.default_content()
                     driver.quit()
                 except:
                     pass
