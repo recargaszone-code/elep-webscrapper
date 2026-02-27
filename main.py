@@ -72,28 +72,30 @@ def extract_history(driver):
     except:
         return []
 
-async def js_fill_and_click(driver, selector, value=None, is_click=False):
+async def js_fill(driver, selector, value):
     try:
-        if value is not None:
-            driver.execute_script(f"""
-                var el = document.querySelector('{selector}');
-                if (el) {{
-                    el.value = '{value}';
-                    el.dispatchEvent(new Event('input', {{bubbles: true}}));
-                    el.dispatchEvent(new Event('change', {{bubbles: true}}));
-                }}
-            """)
-        if is_click:
-            driver.execute_script(f"""
-                var el = document.querySelector('{selector}');
-                if (el) el.click();
-            """)
-        await send_telegram_text(f"JS executado com sucesso para {selector}")
+        driver.execute_script(f"""
+            var el = document.querySelector('{selector}');
+            if (el) {{
+                el.value = '{value}';
+                el.dispatchEvent(new Event('input', {{bubbles: true}}));
+                el.dispatchEvent(new Event('change', {{bubbles: true}}));
+                el.focus();
+            }}
+        """)
+        await send_telegram_text(f"JS fill sucesso para {selector}")
     except Exception as e:
-        await send_telegram_text(f"Erro JS fill/click: {str(e)[:150]}")
+        await send_telegram_text(f"Erro JS fill: {str(e)[:150]}")
+
+async def js_click(driver, selector):
+    try:
+        driver.execute_script(f"document.querySelector('{selector}').click();")
+        await send_telegram_text(f"JS click sucesso para {selector}")
+    except Exception as e:
+        await send_telegram_text(f"Erro JS click: {str(e)[:150]}")
 
 async def main():
-    await send_telegram_text("🤖 Bot vFINAL - Sem iframe, JS force fill + popup fechado")
+    await send_telegram_text("🤖 Bot FINAL - Senha corrigida (name='password' + placeholder='Password')")
 
     while True:
         driver = None
@@ -102,75 +104,76 @@ async def main():
             driver.get(SITE_URL)
             await send_telegram_screenshot(driver, "1. Página carregada")
 
-            wait = WebDriverWait(driver, 40)  # mais tempo
+            wait = WebDriverWait(driver, 40)
 
-            # Fecha OneSignal
+            # Fecha OneSignal popup
             try:
                 cancel_btn = wait.until(EC.element_to_be_clickable((By.ID, "onesignal-slidedown-cancel-button")))
                 driver.execute_script("arguments[0].click();", cancel_btn)
-                await send_telegram_text("✅ OneSignal 'NÃO' clicado via JS")
+                await send_telegram_text("✅ OneSignal 'NÃO' clicado")
                 await send_telegram_screenshot(driver, "Popup fechado")
-                await asyncio.sleep(6)  # tempo pra sumir tudo
+                await asyncio.sleep(8)  # mais tempo pra estabilizar
             except TimeoutException:
-                await send_telegram_text("Sem popup OneSignal - prosseguindo")
+                await send_telegram_text("Sem popup - ok")
             except Exception as e:
                 await send_telegram_text(f"Erro popup: {str(e)[:150]}")
 
-            # Username - tenta normal, fallback JS
+            # Username
             try:
                 username_el = wait.until(EC.element_to_be_clickable((By.ID, "username-login-page")))
                 username_el.clear()
                 username_el.send_keys(USERNAME)
-                await send_telegram_screenshot(driver, "2. Username preenchido (normal)")
+                await send_telegram_screenshot(driver, "2. Username preenchido")
             except Exception as e:
-                await send_telegram_text(f"Normal username falhou: {str(e)[:150]} - usando JS")
-                await js_fill_and_click(driver, '#username-login-page', USERNAME)
+                await send_telegram_text(f"Username normal falhou: {str(e)[:150]} - JS")
+                await js_fill(driver, '#username-login-page', USERNAME)
                 await send_telegram_screenshot(driver, "2. Username via JS")
 
-            await asyncio.sleep(6)
+            await asyncio.sleep(8)  # tempo pro JS ativar senha
 
-            # Senha - mesmo esquema
+            # Senha - seletor corrigido por name="password" (mais seguro)
             try:
-                password_el = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, 'input[type="password"][name="password"]')))
+                password_el = wait.until(EC.element_to_be_clickable((By.NAME, "password")))
                 password_el.clear()
                 password_el.send_keys(PASSWORD)
-                await send_telegram_screenshot(driver, "3. Senha preenchida (normal)")
+                await send_telegram_screenshot(driver, "3. Senha preenchida (name='password')")
             except Exception as e:
-                await send_telegram_text(f"Normal senha falhou: {str(e)[:150]} - usando JS")
-                await js_fill_and_click(driver, 'input[type="password"][name="password"]', PASSWORD)
+                await send_telegram_text(f"Senha normal falhou: {str(e)[:150]} - usando JS")
+                await js_fill(driver, 'input[name="password"]', PASSWORD)
                 await send_telegram_screenshot(driver, "3. Senha via JS")
 
             await asyncio.sleep(6)
 
-            # Botão login - JS force
+            # Botão login - ID "login-page"
             try:
                 login_btn = wait.until(EC.element_to_be_clickable((By.ID, "login-page")))
-                driver.execute_script("arguments[0].click();", login_btn)
-                await send_telegram_screenshot(driver, "4. Login clicado (JS force)")
-                await asyncio.sleep(20)  # espera redirect pesado
+                driver.execute_script("arguments[0].click();", login_btn)  # JS pra evitar not interactable
+                await send_telegram_screenshot(driver, "4. Login clicado")
+                await asyncio.sleep(20)
             except Exception as e:
                 await send_telegram_text(f"Erro botão: {str(e)[:150]}")
-                await send_telegram_screenshot(driver, "Erro botão - veja print")
+                await send_telegram_screenshot(driver, "Erro botão")
 
-            # Histórico e monitor (igual antes)
+            # Histórico
             history = extract_history(driver)
             if history:
                 await send_telegram_text(f"📊 Histórico ({len(history)}): {' | '.join(history)}")
                 await send_telegram_screenshot(driver, "5. Histórico OK")
             else:
-                await send_telegram_text("Sem histórico ainda - pode precisar mais tempo pós-login")
+                await send_telegram_text("Sem histórico - espera pós-login")
                 await send_telegram_screenshot(driver, "5. Sem histórico")
 
+            # Monitor simples
             for _ in range(30):
                 await asyncio.sleep(30)
                 new_hist = extract_history(driver)
-                if new_hist and new_hist[0] != (history[0] if history else ''):
-                    await send_telegram_text(f"🆕 Novo: {new_hist[0]}")
+                if new_hist:
+                    await send_telegram_text(f"🆕 Último: {new_hist[0] if new_hist else '?'}")
 
         except Exception as e:
-            await send_telegram_text(f"❌ Erro crítico: {str(e)[:300]}")
+            await send_telegram_text(f"❌ Erro: {str(e)[:300]}")
             if driver:
-                await send_telegram_screenshot(driver, "Erro crítico")
+                await send_telegram_screenshot(driver, "Erro geral")
         finally:
             if driver:
                 driver.quit()
